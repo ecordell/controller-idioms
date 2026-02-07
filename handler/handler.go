@@ -31,6 +31,11 @@ func (f ContextHandlerFunc) Handle(ctx context.Context) {
 	f(ctx)
 }
 
+// Next satisfies Stage
+func (f ContextHandlerFunc) Next(ctx context.Context) ContextHandler {
+	return f
+}
+
 // Handler wraps a  ContextHandler and adds a method to create a corresponding
 // Builder. Handler has a Key id so that t can be dereferenced by handlers
 // that branch into multiple options and need to choose a specific one.
