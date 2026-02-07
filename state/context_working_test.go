@@ -11,8 +11,8 @@ func TestContextThreadingFixed(t *testing.T) {
 	// Track what values we see in each stage
 	var stage1Value, stage2Value, stage3Value string
 
-	stage1 := func(next Stage) Stage {
-		return StageFunc(func(ctx context.Context) Stage {
+	stage1 := func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
 			// Should see empty value initially
 			if val := ctx.Value("key"); val != nil {
 				stage1Value = val.(string)
@@ -23,14 +23,14 @@ func TestContextThreadingFixed(t *testing.T) {
 
 			// Continue to next stage with modified context
 			if next != nil {
-				return next.Next(newCtx)
+				return next.Run(newCtx)
 			}
 			return nil
 		})
 	}
 
-	stage2 := func(next Stage) Stage {
-		return StageFunc(func(ctx context.Context) Stage {
+	stage2 := func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
 			// Should see "from-stage1"
 			if val := ctx.Value("key"); val != nil {
 				stage2Value = val.(string)
@@ -41,14 +41,14 @@ func TestContextThreadingFixed(t *testing.T) {
 
 			// Continue to next stage with modified context
 			if next != nil {
-				return next.Next(newCtx)
+				return next.Run(newCtx)
 			}
 			return nil
 		})
 	}
 
-	stage3 := func(next Stage) Stage {
-		return StageFunc(func(ctx context.Context) Stage {
+	stage3 := func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
 			// Should see "from-stage2"
 			if val := ctx.Value("key"); val != nil {
 				stage3Value = val.(string)
@@ -56,7 +56,7 @@ func TestContextThreadingFixed(t *testing.T) {
 
 			// Continue to next stage
 			if next != nil {
-				return next.Next(ctx)
+				return next.Run(ctx)
 			}
 			return nil
 		})
@@ -87,13 +87,13 @@ func TestContextThreadingWithAction(t *testing.T) {
 	var values []string
 
 	// Create an Action that modifies context by wrapping it
-	addValue := func(key, value string) NewStage {
-		return func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+	addValue := func(key, value string) NewStep {
+		return func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				values = append(values, "adding-"+value)
 				newCtx := context.WithValue(ctx, key, value)
 				if next != nil {
-					return next.Next(newCtx)
+					return next.Run(newCtx)
 				}
 				return nil
 			})
@@ -101,16 +101,16 @@ func TestContextThreadingWithAction(t *testing.T) {
 	}
 
 	// Create an Action that reads from context
-	readValue := func(key string) NewStage {
-		return func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+	readValue := func(key string) NewStep {
+		return func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				if val := ctx.Value(key); val != nil {
 					values = append(values, "reading-"+val.(string))
 				} else {
 					values = append(values, "reading-empty")
 				}
 				if next != nil {
-					return next.Next(ctx)
+					return next.Run(ctx)
 				}
 				return nil
 			})
@@ -152,12 +152,12 @@ func TestContextThreadingWithDecision(t *testing.T) {
 	var predicateValue string
 	var branchValue string
 
-	setupStage := func(next Stage) Stage {
-		return StageFunc(func(ctx context.Context) Stage {
+	setupStage := func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
 			// Modify context to affect decision
 			newCtx := context.WithValue(ctx, "condition", "modified")
 			if next != nil {
-				return next.Next(newCtx)
+				return next.Run(newCtx)
 			}
 			return nil
 		})
@@ -170,20 +170,20 @@ func TestContextThreadingWithDecision(t *testing.T) {
 			predicateValue = val
 			return val == "modified"
 		},
-		func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+		func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				branchValue = "true-branch"
 				if next != nil {
-					return next.Next(ctx)
+					return next.Run(ctx)
 				}
 				return nil
 			})
 		},
-		func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+		func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				branchValue = "false-branch"
 				if next != nil {
-					return next.Next(ctx)
+					return next.Run(ctx)
 				}
 				return nil
 			})
@@ -211,12 +211,12 @@ func TestContextThreadingWithEnum(t *testing.T) {
 	var enumValue string
 	var branchValue string
 
-	setupStage := func(next Stage) Stage {
-		return StageFunc(func(ctx context.Context) Stage {
+	setupStage := func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
 			// Change the type to affect enum decision
 			newCtx := context.WithValue(ctx, "type", "deployment")
 			if next != nil {
-				return next.Next(newCtx)
+				return next.Run(newCtx)
 			}
 			return nil
 		})
@@ -229,31 +229,31 @@ func TestContextThreadingWithEnum(t *testing.T) {
 			enumValue = val
 			return val
 		},
-		map[string]NewStage{
-			"deployment": func(next Stage) Stage {
-				return StageFunc(func(ctx context.Context) Stage {
+		map[string]NewStep{
+			"deployment": func(next Step) Step {
+				return StepFunc(func(ctx context.Context) Step {
 					branchValue = "deployment-branch"
 					if next != nil {
-						return next.Next(ctx)
+						return next.Run(ctx)
 					}
 					return nil
 				})
 			},
-			"service": func(next Stage) Stage {
-				return StageFunc(func(ctx context.Context) Stage {
+			"service": func(next Step) Step {
+				return StepFunc(func(ctx context.Context) Step {
 					branchValue = "service-branch"
 					if next != nil {
-						return next.Next(ctx)
+						return next.Run(ctx)
 					}
 					return nil
 				})
 			},
 		},
-		func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+		func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				branchValue = "default-branch"
 				if next != nil {
-					return next.Next(ctx)
+					return next.Run(ctx)
 				}
 				return nil
 			})
@@ -288,23 +288,23 @@ func TestContextThreadingWithMap(t *testing.T) {
 				original := ctx.Value("value").(string)
 				return context.WithValue(ctx, "value", original+"-transformed")
 			},
-			func(next Stage) Stage {
-				return StageFunc(func(ctx context.Context) Stage {
+			func(next Step) Step {
+				return StepFunc(func(ctx context.Context) Step {
 					transformedValue = ctx.Value("value").(string)
 					// Add another transformation
 					newCtx := context.WithValue(ctx, "value", transformedValue+"-again")
 					if next != nil {
-						return next.Next(newCtx)
+						return next.Run(newCtx)
 					}
 					return nil
 				})
 			},
 		),
-		func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+		func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				finalValue = ctx.Value("value").(string)
 				if next != nil {
-					return next.Next(ctx)
+					return next.Run(ctx)
 				}
 				return nil
 			})

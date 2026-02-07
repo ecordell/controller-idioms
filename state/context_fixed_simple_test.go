@@ -12,15 +12,15 @@ func TestContextThreadingNowWorksWithAction(t *testing.T) {
 	var stage1Value, stage2Value, stage3Value string
 
 	// Create a helper that adds a value to context
-	addToContext := func(key, value string) NewStage {
-		return func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+	addToContext := func(key, value string) NewStep {
+		return func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				// Add value to context
 				newCtx := context.WithValue(ctx, key, value)
 
 				// Continue to next stage with modified context
 				if next != nil {
-					return next.Next(newCtx)
+					return next.Run(newCtx)
 				}
 				return nil
 			})
@@ -80,12 +80,12 @@ func TestDecisionWithContextThreading(t *testing.T) {
 	var branchValue string
 
 	// Helper to modify context
-	setCondition := func(value string) NewStage {
-		return func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+	setCondition := func(value string) NewStep {
+		return func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				newCtx := context.WithValue(ctx, "condition", value)
 				if next != nil {
-					return next.Next(newCtx)
+					return next.Run(newCtx)
 				}
 				return nil
 			})
@@ -127,12 +127,12 @@ func TestEnumWithContextThreading(t *testing.T) {
 	var branchValue string
 
 	// Helper to change the resource type
-	setResourceType := func(resourceType string) NewStage {
-		return func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+	setResourceType := func(resourceType string) NewStep {
+		return func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				newCtx := context.WithValue(ctx, "type", resourceType)
 				if next != nil {
-					return next.Next(newCtx)
+					return next.Run(newCtx)
 				}
 				return nil
 			})
@@ -147,7 +147,7 @@ func TestEnumWithContextThreading(t *testing.T) {
 				enumValue = val
 				return val
 			},
-			map[string]NewStage{
+			map[string]NewStep{
 				"deployment": Action(func(ctx context.Context) {
 					branchValue = "deployment-handler"
 				}),

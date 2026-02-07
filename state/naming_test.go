@@ -9,13 +9,13 @@ func TestHandlerNewStepStepNaming(t *testing.T) {
 	ctx := context.Background()
 	var executed []string
 
-	// Test that Step() creates context-transforming steps
-	addUser := Step(func(ctx context.Context) context.Context {
+	// Test that Do() creates context-transforming steps
+	addUser := Do(func(ctx context.Context) context.Context {
 		executed = append(executed, "adding-user")
 		return context.WithValue(ctx, "user", "alice")
 	})
 
-	readUser := Step(func(ctx context.Context) context.Context {
+	readUser := Do(func(ctx context.Context) context.Context {
 		if user := ctx.Value("user"); user != nil {
 			executed = append(executed, "user-is-"+user.(string))
 		}
@@ -26,9 +26,9 @@ func TestHandlerNewStepStepNaming(t *testing.T) {
 	var constructor NewStep = addUser
 	_ = constructor
 
-	// Test that Handler is the execution interface
-	var handler Handler = addUser.Handler()
-	_ = handler
+	// Test that Step is the execution interface
+	var step Step = addUser.Step()
+	_ = step
 
 	// Test that composition works
 	pipeline := Sequence(addUser, readUser)
@@ -45,7 +45,7 @@ func TestHandlerNewStepStepNaming(t *testing.T) {
 		}
 	}
 
-	t.Log("Handler/NewStep/Step naming works correctly!")
+	t.Log("Step/NewStep/Do naming works correctly!")
 }
 
 func TestContextThreadingWithNewNaming(t *testing.T) {
@@ -53,17 +53,17 @@ func TestContextThreadingWithNewNaming(t *testing.T) {
 	var values []string
 
 	pipeline := Sequence(
-		Step(func(ctx context.Context) context.Context {
+		Do(func(ctx context.Context) context.Context {
 			values = append(values, "step1")
 			return context.WithValue(ctx, "count", 1)
 		}),
-		Step(func(ctx context.Context) context.Context {
+		Do(func(ctx context.Context) context.Context {
 			count := ctx.Value("count").(int)
 			values = append(values, "step2-count-1")
 			return context.WithValue(ctx, "count", count+1)
 		}),
-		Step(func(ctx context.Context) context.Context {
-			ctx.Value("count").(int) // Read but don't store in variable
+		Do(func(ctx context.Context) context.Context {
+			_ = ctx.Value("count").(int) // Read but don't store in variable
 			values = append(values, "step3-count-2")
 			return ctx
 		}),

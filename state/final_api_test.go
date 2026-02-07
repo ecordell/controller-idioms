@@ -12,13 +12,13 @@ func TestFinalAPIDemo(t *testing.T) {
 	var contextValues []string
 
 	// Helper to add context value and continue
-	addContextValue := func(key, value string) NewStage {
-		return func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+	addContextValue := func(key, value string) NewStep {
+		return func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				executed = append(executed, "adding-"+value)
 				newCtx := context.WithValue(ctx, key, value)
 				if next != nil {
-					return next.Next(newCtx)
+					return next.Run(newCtx)
 				}
 				return nil
 			})
@@ -26,7 +26,7 @@ func TestFinalAPIDemo(t *testing.T) {
 	}
 
 	// Helper to read context value
-	readContextValue := func(key string) NewStage {
+	readContextValue := func(key string) NewStep {
 		return Action(func(ctx context.Context) {
 			if val := ctx.Value(key); val != nil {
 				contextValues = append(contextValues, val.(string))
@@ -73,7 +73,7 @@ func TestFinalAPIDemo(t *testing.T) {
 				}
 				return "unknown"
 			},
-			map[string]NewStage{
+			map[string]NewStep{
 				"modified": Sequence(
 					Action(func(ctx context.Context) {
 						executed = append(executed, "enum-modified")
@@ -217,10 +217,10 @@ func TestDirectStageExecution(t *testing.T) {
 	// You can still execute stages directly without Run()
 	stage := Action(func(ctx context.Context) {
 		executed = true
-	}).Stage()
+	}).Step()
 
 	// Direct execution - also works
-	stage.Next(ctx)
+	stage.Run(ctx)
 
 	if !executed {
 		t.Error("Expected stage to execute")
@@ -233,28 +233,28 @@ func TestContextThreadingShowcase(t *testing.T) {
 	var phases []string
 
 	// Showcase that demonstrates the power of context threading
-	authenticate := func(user string) NewStage {
-		return func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+	authenticate := func(user string) NewStep {
+		return func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				phases = append(phases, "authenticating-"+user)
 				authCtx := context.WithValue(ctx, "user", user)
 				authCtx = context.WithValue(authCtx, "authenticated", true)
 				if next != nil {
-					return next.Next(authCtx)
+					return next.Run(authCtx)
 				}
 				return nil
 			})
 		}
 	}
 
-	authorize := func(resource string) NewStage {
-		return func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+	authorize := func(resource string) NewStep {
+		return func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				user := ctx.Value("user").(string)
 				phases = append(phases, "authorizing-"+user+"-for-"+resource)
 				authzCtx := context.WithValue(ctx, "authorized", resource)
 				if next != nil {
-					return next.Next(authzCtx)
+					return next.Run(authzCtx)
 				}
 				return nil
 			})

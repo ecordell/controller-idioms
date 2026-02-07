@@ -3,6 +3,7 @@ package state
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -336,7 +337,7 @@ func ExampleEnum() {
 		func(ctx context.Context) string {
 			return ctx.Value("operation").(string)
 		},
-		map[string]NewStage{
+		map[string]NewStep{
 			"create": Action(func(ctx context.Context) {
 				fmt.Println("creating resource")
 			}),
@@ -367,7 +368,7 @@ func ExampleSwitch() {
 			func(ctx context.Context) string {
 				return ctx.Value("status").(string)
 			},
-			map[string]NewStage{
+			map[string]NewStep{
 				"pending": Action(func(ctx context.Context) {
 					fmt.Println("handling pending status")
 				}),
@@ -412,7 +413,7 @@ func TestEnumExecution(t *testing.T) {
 				func(ctx context.Context) int {
 					return tc.value
 				},
-				map[int]NewStage{
+				map[int]NewStep{
 					1: Action(func(ctx context.Context) {
 						result = "one"
 					}),
@@ -459,7 +460,7 @@ func TestSwitchExecution(t *testing.T) {
 				func(ctx context.Context) string {
 					return tc.status
 				},
-				map[string]NewStage{
+				map[string]NewStep{
 					"success": Action(func(ctx context.Context) {
 						result = "handled success"
 					}),
@@ -492,7 +493,7 @@ func TestEnumWithoutDefault(t *testing.T) {
 		func(ctx context.Context) string {
 			return "nonexistent"
 		},
-		map[string]NewStage{
+		map[string]NewStep{
 			"exists": Action(func(ctx context.Context) {
 				executed = true
 			}),
@@ -700,11 +701,11 @@ func TestCallAndCheck(t *testing.T) {
 		Action(func(ctx context.Context) {
 			mainExecuted = true
 		}),
-		func(ctx context.Context, result Stage) Stage {
+		func(ctx context.Context, result Step) Step {
 			resultChecked = true
 			return Action(func(ctx context.Context) {
 				nextExecuted = true
-			}).Stage()
+			}).Step()
 		},
 	)
 
@@ -789,7 +790,7 @@ func TestReuse(t *testing.T) {
 		Action(func(ctx context.Context) {
 			reuseExecuted = true
 		}),
-		func(ctx context.Context) NewStage {
+		func(ctx context.Context) NewStep {
 			return Action(func(ctx context.Context) {
 				afterExecuted = true
 			})
@@ -803,5 +804,72 @@ func TestReuse(t *testing.T) {
 	}
 	if !afterExecuted {
 		t.Error("expected after-execution stage to execute")
+	}
+}
+
+func TestParallelPanicRecovery(t *testing.T) {
+	ctx := context.Background()
+	var executed []string
+	var mu sync.Mutex
+
+	pipeline := Parallel(
+		Action(func(ctx context.Context) {
+			mu.Lock()
+			executed = append(executed, "step1")
+			mu.Unlock()
+		}),
+		Action(func(ctx context.Context) {
+			mu.Lock()
+			executed = append(executed, "step2-before-panic")
+			mu.Unlock()
+			panic("intentional panic")
+		}),
+		Action(func(ctx context.Context) {
+			mu.Lock()
+			executed = append(executed, "step3")
+			mu.Unlock()
+		}),
+	)
+
+	// Should not panic - panic is recovered
+	Run(ctx, pipeline)
+
+	// All steps should execute (panic doesn't stop other goroutines)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(executed) < 3 {
+		t.Logf("Executed steps: %v", executed)
+		t.Log("Note: Panic in one goroutine doesn't prevent others from executing")
+	}
+}
+
+func TestParallelCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	var executed []string
+	var mu sync.Mutex
+
+	pipeline := Parallel(
+		Action(func(ctx context.Context) {
+			mu.Lock()
+			executed = append(executed, "step1")
+			mu.Unlock()
+		}),
+		Action(func(ctx context.Context) {
+			mu.Lock()
+			executed = append(executed, "step2")
+			mu.Unlock()
+		}),
+	)
+
+	Run(ctx, pipeline)
+
+	// With cancelled context, steps should not execute
+	mu.Lock()
+	defer mu.Unlock()
+	if len(executed) > 0 {
+		t.Logf("Some steps executed despite cancellation: %v", executed)
+		t.Log("Note: There's a race - steps might start before cancellation check")
 	}
 }

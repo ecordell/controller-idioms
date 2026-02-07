@@ -1,9 +1,9 @@
-// Package formal provides the mathematical foundations for the Stage system.
+// Package formal provides the mathematical foundations for the Step system.
 //
-// The Stage system forms a Kleisli category where:
+// The Step system forms a Kleisli category where:
 // - Objects are Context states
 // - Morphisms are context transformations (Context -> Context)
-// - Kleisli arrows are Stages (Context -> (Context, Continuation))
+// - Kleisli arrows are Steps (Context -> (Context, Continuation))
 // - Composition is provided by Sequence, Decision, etc.
 //
 // This provides a formal foundation for compositional computation with context threading.
@@ -41,10 +41,10 @@ func Compose(f, g Morphism) Morphism {
 // KLEISLI CATEGORY
 // =============================================================================
 
-// KleisliArrow represents a Kleisli arrow in our "Handler monad".
-// Conceptually: Context -> M(Context) where M is our "Handler monad"
-// Practically: This is what NewHandler represents.
-type KleisliArrow = NewHandler
+// KleisliArrow represents a Kleisli arrow in our "Step monad".
+// Conceptually: Context -> M(Context) where M is our "Step monad"
+// Practically: This is what NewStep represents.
+type KleisliArrow = NewStep
 
 // KleisliCompose composes two Kleisli arrows.
 // This is the fundamental operation that makes stages composable.
@@ -57,12 +57,12 @@ func KleisliCompose(f, g KleisliArrow) KleisliArrow {
 // FORMAL HANDLER MONAD
 // =============================================================================
 
-// The Handler type forms a monad with the following operations:
+// The Step type forms a monad with the following operations:
 
 // Unit (η): Morphism -> KleisliArrow
-// Lifts a pure context transformation into the Handler monad.
+// Lifts a pure context transformation into the Step monad.
 func Unit(m Morphism) KleisliArrow {
-	return Step(m)
+	return Do(m)
 }
 
 // Join (μ): Would flatten nested stages, but our continuation-passing style
@@ -72,18 +72,18 @@ func Unit(m Morphism) KleisliArrow {
 // FUNCTOR OPERATIONS
 // =============================================================================
 
-// MapF lifts a morphism to operate on handlers.
+// MapF lifts a morphism to operate on steps.
 // This is the functor operation: fmap :: (a -> b) -> f a -> f b
-func MapF(m Morphism, handler KleisliArrow) KleisliArrow {
-	return func(next Handler) Handler {
-		return HandlerFunc(func(ctx context.Context) Handler {
+func MapF(m Morphism, step KleisliArrow) KleisliArrow {
+	return func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
 			transformedCtx := m(ctx)
-			wrappedHandler := handler(next)
-			if wrappedHandler != nil {
-				return wrappedHandler.Handle(transformedCtx)
+			wrappedStep := step(next)
+			if wrappedStep != nil {
+				return wrappedStep.Run(transformedCtx)
 			}
 			if next != nil {
-				return next.Handle(transformedCtx)
+				return next.Run(transformedCtx)
 			}
 			return nil
 		})
@@ -129,29 +129,29 @@ func VerifyAssociativityLaw(f, g, h Morphism, ctx context.Context) bool {
 // MONAD LAWS
 // =============================================================================
 
-// VerifyLeftIdentityLaw verifies the left identity law for our monad.
-// return a >>= f = f a
-func VerifyLeftIdentityLaw(m Morphism, f func() KleisliArrow, ctx context.Context) bool {
-	// This would require executing the stages and comparing results
-	// Left as a structural verification for testing
-	return true // Placeholder
-}
-
-// VerifyRightIdentityLaw verifies the right identity law.
-// m >>= return = m
-func VerifyRightIdentityLaw(stage KleisliArrow, ctx context.Context) bool {
-	// This would require executing the stages and comparing results
-	// Left as a structural verification for testing
-	return true // Placeholder
-}
-
-// VerifyAssociativityMonadLaw verifies monad associativity.
-// (m >>= f) >>= g = m >>= (\x -> f x >>= g)
-func VerifyAssociativityMonadLaw(stage KleisliArrow, f, g func() KleisliArrow, ctx context.Context) bool {
-	// This would require executing the stages and comparing results
-	// Left as a structural verification for testing
-	return true // Placeholder
-}
+// The monad laws for our Step system are:
+//
+// Left Identity:  Unit(a) >>= f  ≡  f(a)
+//   Do(id) composed with f should be equivalent to just f
+//
+// Right Identity:  m >>= Unit  ≡  m
+//   Composing with Do(id) should not change behavior
+//
+// Associativity:  (m >>= f) >>= g  ≡  m >>= (\x -> f(x) >>= g)
+//   Order of composition operations doesn't matter
+//
+// These laws are verified through the test suite in formal_test.go by:
+// 1. Testing that Do(Identity()) composes correctly (left/right identity)
+// 2. Testing that Sequence composition is associative
+// 3. Testing that Bind operations compose correctly
+//
+// Note: Runtime verification of these laws for arbitrary steps would require:
+// - Executing steps and capturing/comparing their effects
+// - Deep equality comparison of context modifications
+// - Formal proof techniques or property-based testing
+//
+// The structural tests in formal_test.go provide confidence that the laws hold
+// for the concrete implementations we provide.
 
 // =============================================================================
 // FORMAL COMBINATORS
@@ -159,40 +159,40 @@ func VerifyAssociativityMonadLaw(stage KleisliArrow, f, g func() KleisliArrow, c
 
 // These are the fundamental combinators that preserve the categorical structure.
 
-// SequenceC is the categorical product for handlers - sequential composition.
-func SequenceC(handlers ...KleisliArrow) KleisliArrow {
-	return Sequence(handlers...)
+// SequenceC is the categorical product for steps - sequential composition.
+func SequenceC(steps ...KleisliArrow) KleisliArrow {
+	return Sequence(steps...)
 }
 
-// ChoiceC is the categorical coproduct for handlers - choice composition.
+// ChoiceC is the categorical coproduct for steps - choice composition.
 func ChoiceC(predicate func(context.Context) bool, left, right KleisliArrow) KleisliArrow {
 	return Decision(predicate, left, right)
 }
 
 // ParallelC represents parallel composition in our category.
-func ParallelC(handlers ...KleisliArrow) KleisliArrow {
-	return Parallel(handlers...)
+func ParallelC(steps ...KleisliArrow) KleisliArrow {
+	return Parallel(steps...)
 }
 
 // =============================================================================
 // NATURAL TRANSFORMATIONS
 // =============================================================================
 
-// A natural transformation between our Stage "functor" and other functors.
+// A natural transformation between our Step "functor" and other functors.
 
-// ToOption transforms a stage that might fail into an optional result.
-// This demonstrates how our Stage system can interface with other monadic systems.
+// ToOption transforms a step that might fail into an optional result.
+// This demonstrates how our Step system can interface with other monadic systems.
 type Option[T any] struct {
 	Value *T
 	Error error
 }
 
-func ToOption[T any](stage KleisliArrow, extract func(context.Context) (T, error)) func(context.Context) Option[T] {
+func ToOption[T any](step KleisliArrow, extract func(context.Context) (T, error)) func(context.Context) Option[T] {
 	return func(ctx context.Context) Option[T] {
-		// Execute the stage
-		s := stage(nil)
+		// Execute the step
+		s := step(nil)
 		if s != nil {
-			s.Handle(ctx)
+			s.Run(ctx)
 		}
 
 		// Extract the result
@@ -208,32 +208,32 @@ func ToOption[T any](stage KleisliArrow, extract func(context.Context) (T, error
 // HIGHER-ORDER OPERATIONS
 // =============================================================================
 
-// Lift lifts a function of arity n to work on handlers.
+// Lift lifts a function of arity n to work on steps.
 // This is a generalization of Map for multiple arguments.
 
-// Lift2 lifts a binary function to work on two handlers.
+// Lift2 lifts a binary function to work on two steps.
 func Lift2(f func(context.Context, context.Context) context.Context, handler1, handler2 KleisliArrow) KleisliArrow {
-	return func(next Handler) Handler {
-		return HandlerFunc(func(ctx context.Context) Handler {
-			// Execute first handler
+	return func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
+			// Execute first step
 			s1 := handler1(nil)
 			var ctx1 context.Context = ctx
 			if s1 != nil {
-				s1.Handle(ctx1) // This modifies ctx1 through side effects conceptually
+				s1.Run(ctx1) // This modifies ctx1 through side effects conceptually
 			}
 
-			// Execute second handler
+			// Execute second step
 			s2 := handler2(nil)
 			var ctx2 context.Context = ctx
 			if s2 != nil {
-				s2.Handle(ctx2)
+				s2.Run(ctx2)
 			}
 
 			// Combine results
 			result := f(ctx1, ctx2)
 
 			if next != nil {
-				return next.Handle(result)
+				return next.Run(result)
 			}
 			return nil
 		})
@@ -244,41 +244,41 @@ func Lift2(f func(context.Context, context.Context) context.Context, handler1, h
 // ALGEBRAIC STRUCTURE
 // =============================================================================
 
-// Our Handler system forms several algebraic structures:
+// Our Step system forms several algebraic structures:
 
 // 1. Category: Objects (contexts), Morphisms (transformations), Composition
-// 2. Kleisli Category: Based on our "Handler monad"
+// 2. Kleisli Category: Based on our "Step monad"
 // 3. Monad: Unit (Step), Bind (monadic composition), with laws
 // 4. Applicative Functor: Apply operations (Lift2, etc.)
 // 5. Functor: Map operation
 
 // This provides a solid mathematical foundation for:
-// - Compositional reasoning about handler pipelines
-// - Formal verification of handler behavior
-// - Type-safe handler construction and combination
+// - Compositional reasoning about step pipelines
+// - Formal verification of step behavior
+// - Type-safe step construction and combination
 // - Lawful behavior guarantees
 
 // =============================================================================
 // INTERPRETATIONS
 // =============================================================================
 
-// Different ways to interpret/execute our handler descriptions:
+// Different ways to interpret/execute our step descriptions:
 
-// DirectInterpreter executes handlers immediately.
+// DirectInterpreter executes steps immediately.
 type DirectInterpreter struct{}
 
-func (DirectInterpreter) Interpret(ctx context.Context, handler KleisliArrow) context.Context {
+func (DirectInterpreter) Interpret(ctx context.Context, step KleisliArrow) context.Context {
 	// Create a wrapper that captures the final context
 	var finalCtx context.Context
 
-	wrapper := HandlerFunc(func(receivedCtx context.Context) Handler {
+	wrapper := StepFunc(func(receivedCtx context.Context) Step {
 		finalCtx = receivedCtx
 		return nil
 	})
 
-	s := handler(wrapper)
+	s := step(wrapper)
 	if s != nil {
-		s.Handle(ctx)
+		s.Run(ctx)
 	}
 
 	if finalCtx != nil {
@@ -287,25 +287,25 @@ func (DirectInterpreter) Interpret(ctx context.Context, handler KleisliArrow) co
 	return ctx
 }
 
-// TracingInterpreter executes handlers while building a trace.
+// TracingInterpreter executes steps while building a trace.
 type TracingInterpreter struct {
 	Trace []string
 }
 
-func (t *TracingInterpreter) Interpret(ctx context.Context, handler KleisliArrow) context.Context {
-	t.Trace = append(t.Trace, "executing handler")
+func (t *TracingInterpreter) Interpret(ctx context.Context, step KleisliArrow) context.Context {
+	t.Trace = append(t.Trace, "executing step")
 
 	// Create a wrapper that captures the final context
 	var finalCtx context.Context
 
-	wrapper := HandlerFunc(func(receivedCtx context.Context) Handler {
+	wrapper := StepFunc(func(receivedCtx context.Context) Step {
 		finalCtx = receivedCtx
 		return nil
 	})
 
-	s := handler(wrapper)
+	s := step(wrapper)
 	if s != nil {
-		s.Handle(ctx)
+		s.Run(ctx)
 	}
 
 	if finalCtx != nil {
@@ -318,4 +318,4 @@ func (t *TracingInterpreter) Interpret(ctx context.Context, handler KleisliArrow
 // - Testing with mock interpreters
 // - Tracing and debugging
 // - Optimization through different execution strategies
-// - Formal analysis of handler behavior
+// - Formal analysis of step behavior

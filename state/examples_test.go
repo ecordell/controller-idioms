@@ -111,7 +111,7 @@ func Example_monadicPatterns() {
 			Action(func(ctx context.Context) {
 				fmt.Println("first operation")
 			}),
-			func() NewStage {
+			func() NewStep {
 				return Action(func(ctx context.Context) {
 					fmt.Println("dependent operation")
 				})
@@ -174,7 +174,7 @@ func Example_complexConditionals() {
 			func(ctx context.Context) string {
 				return ctx.Value("user-role").(string)
 			},
-			map[string]NewStage{
+			map[string]NewStep{
 				"admin": Action(func(ctx context.Context) {
 					fmt.Println("admin workflow")
 				}),
@@ -208,20 +208,20 @@ func Example_reusableStages() {
 	ctx := context.Background()
 
 	// Define reusable stages
-	logStart := func(name string) NewStage {
+	logStart := func(name string) NewStep {
 		return Action(func(ctx context.Context) {
 			fmt.Printf("starting %s\n", name)
 		})
 	}
 
-	logEnd := func(name string) NewStage {
+	logEnd := func(name string) NewStep {
 		return Action(func(ctx context.Context) {
 			fmt.Printf("completed %s\n", name)
 		})
 	}
 
 	// Wrap a stage with logging
-	withLogging := func(name string, stage NewStage) NewStage {
+	withLogging := func(name string, stage NewStep) NewStep {
 		return Sequence(
 			logStart(name),
 			stage,
@@ -268,7 +268,7 @@ func Example_builderReplacement() {
 	// 4. Complex ID management for branching
 
 	// In the state system, it's much simpler:
-	// Just compose NewStage functions directly
+	// Just compose NewStep functions directly
 
 	// Old way (conceptually):
 	// validationBuilder := func(next Handler) Handler { ... }
@@ -306,7 +306,7 @@ func Example_enumBranching() {
 			func(ctx context.Context) string {
 				return ctx.Value("resource-type").(string)
 			},
-			map[string]NewStage{
+			map[string]NewStep{
 				"deployment": Sequence(
 					Action(func(ctx context.Context) {
 						fmt.Println("validating deployment spec")
@@ -358,7 +358,7 @@ func Example_switchWorkflow() {
 			func(ctx context.Context) string {
 				return ctx.Value("phase").(string)
 			},
-			map[string]NewStage{
+			map[string]NewStep{
 				"pending": Sequence(
 					Action(func(ctx context.Context) {
 						fmt.Println("initializing resources")
@@ -435,7 +435,7 @@ func Example_controllerWithEnum() {
 			func(ctx context.Context) string {
 				return ctx.Value("operation").(string)
 			},
-			map[string]NewStage{
+			map[string]NewStep{
 				"reconcile": Sequence(
 					setFinalizer,
 					validateSpec,
@@ -488,20 +488,20 @@ func Example_stageReuse() {
 	// - Otherwise do validation work and check for cancellation
 	// - Then continue to next stage
 	pipeline := Sequence(
-		func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+		func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				validations := ctx.Value("validations").([]string)
 
 				// Skip if no validations are specified
 				if len(validations) == 0 {
 					if next != nil {
-						return next.Next(ctx)
+						return next.Run(ctx)
 					}
 					return nil
 				}
 
 				// Ensure ValidatingAdmissionPolicy
-				ensureValidatingAdmissionPolicy(nil).Next(ctx)
+				ensureValidatingAdmissionPolicy(nil).Run(ctx)
 
 				// catch errors that happened inside the component handler
 				if ctx.Err() != nil {
@@ -509,7 +509,7 @@ func Example_stageReuse() {
 				}
 
 				if next != nil {
-					return next.Next(ctx)
+					return next.Run(ctx)
 				}
 				return nil
 			})
@@ -569,7 +569,7 @@ func Example_callAndContinueIf() {
 func Example_callAndCheck() {
 	ctx := context.Background()
 
-	// Stage that might succeed or fail
+	// Step that might succeed or fail
 	riskyStagetage := Action(func(ctx context.Context) {
 		fmt.Println("executing risky operation")
 		// Simulate some work that might set error state
@@ -577,19 +577,19 @@ func Example_callAndCheck() {
 
 	pipeline := CallAndCheck(
 		riskyStagetage,
-		func(ctx context.Context, result Stage) Stage {
+		func(ctx context.Context, result Step) Step {
 			// Inspect context or result to decide what to do next
 			if ctx.Err() != nil {
 				fmt.Println("operation failed - running recovery")
 				return Action(func(ctx context.Context) {
 					fmt.Println("recovery completed")
-				}).Stage()
+				}).Step()
 			}
 
 			fmt.Println("operation succeeded - running cleanup")
 			return Action(func(ctx context.Context) {
 				fmt.Println("cleanup completed")
-			}).Stage()
+			}).Step()
 		},
 	)
 

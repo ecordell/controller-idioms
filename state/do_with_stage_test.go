@@ -7,18 +7,18 @@ import (
 
 func TestDoWithStageAsWrapper(t *testing.T) {
 	// Do as a stage wrapper - transforms context before executing wrapped stage
-	Do := func(transform func(context.Context) context.Context, stage NewStage) NewStage {
-		return func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+	Do := func(transform func(context.Context) context.Context, stage NewStep) NewStep {
+		return func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				// Transform context first
 				newCtx := transform(ctx)
 				// Then execute the wrapped stage with transformed context
 				wrappedStage := stage(next)
 				if wrappedStage != nil {
-					return wrappedStage.Next(newCtx)
+					return wrappedStage.Run(newCtx)
 				}
 				if next != nil {
-					return next.Next(newCtx)
+					return next.Run(newCtx)
 				}
 				return nil
 			})
@@ -29,15 +29,15 @@ func TestDoWithStageAsWrapper(t *testing.T) {
 	var results []string
 
 	// Base stage that reads from context
-	readUser := func(next Stage) Stage {
-		return StageFunc(func(ctx context.Context) Stage {
+	readUser := func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
 			if user := ctx.Value("user"); user != nil {
 				results = append(results, "user-is-"+user.(string))
 			} else {
 				results = append(results, "no-user")
 			}
 			if next != nil {
-				return next.Next(ctx)
+				return next.Run(ctx)
 			}
 			return nil
 		})
@@ -71,17 +71,17 @@ func TestDoWithStageAsWrapper(t *testing.T) {
 
 func TestDoAsStageTransformer(t *testing.T) {
 	// Do returns a function that transforms stages
-	Do := func(transform func(context.Context) context.Context) func(NewStage) NewStage {
-		return func(stage NewStage) NewStage {
-			return func(next Stage) Stage {
-				return StageFunc(func(ctx context.Context) Stage {
+	Do := func(transform func(context.Context) context.Context) func(NewStep) NewStep {
+		return func(stage NewStep) NewStep {
+			return func(next Step) Step {
+				return StepFunc(func(ctx context.Context) Step {
 					newCtx := transform(ctx)
 					wrappedStage := stage(next)
 					if wrappedStage != nil {
-						return wrappedStage.Next(newCtx)
+						return wrappedStage.Run(newCtx)
 					}
 					if next != nil {
-						return next.Next(newCtx)
+						return next.Run(newCtx)
 					}
 					return nil
 				})
@@ -93,25 +93,25 @@ func TestDoAsStageTransformer(t *testing.T) {
 	var results []string
 
 	// Base stages
-	readUser := func(next Stage) Stage {
-		return StageFunc(func(ctx context.Context) Stage {
+	readUser := func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
 			if user := ctx.Value("user"); user != nil {
 				results = append(results, "reading-user-"+user.(string))
 			}
 			if next != nil {
-				return next.Next(ctx)
+				return next.Run(ctx)
 			}
 			return nil
 		})
 	}
 
-	readRole := func(next Stage) Stage {
-		return StageFunc(func(ctx context.Context) Stage {
+	readRole := func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
 			if role := ctx.Value("role"); role != nil {
 				results = append(results, "reading-role-"+role.(string))
 			}
 			if next != nil {
-				return next.Next(ctx)
+				return next.Run(ctx)
 			}
 			return nil
 		})
@@ -156,8 +156,8 @@ func TestDoAsStageTransformer(t *testing.T) {
 
 func TestDoAsStageComposition(t *testing.T) {
 	// Do composes two stages in sequence
-	Do := func(preStage NewStage, postStage NewStage) NewStage {
-		return func(next Stage) Stage {
+	Do := func(preStage NewStep, postStage NewStep) NewStep {
+		return func(next Step) Step {
 			// Chain: preStage -> postStage -> next
 			return preStage(postStage(next))
 		}
@@ -166,35 +166,35 @@ func TestDoAsStageComposition(t *testing.T) {
 	ctx := context.Background()
 	var results []string
 
-	setUser := func(next Stage) Stage {
-		return StageFunc(func(ctx context.Context) Stage {
+	setUser := func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
 			results = append(results, "setting-user")
 			newCtx := context.WithValue(ctx, "user", "charlie")
 			if next != nil {
-				return next.Next(newCtx)
+				return next.Run(newCtx)
 			}
 			return nil
 		})
 	}
 
-	setRole := func(next Stage) Stage {
-		return StageFunc(func(ctx context.Context) Stage {
+	setRole := func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
 			results = append(results, "setting-role")
 			newCtx := context.WithValue(ctx, "role", "user")
 			if next != nil {
-				return next.Next(newCtx)
+				return next.Run(newCtx)
 			}
 			return nil
 		})
 	}
 
-	logContext := func(next Stage) Stage {
-		return StageFunc(func(ctx context.Context) Stage {
+	logContext := func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
 			user := ctx.Value("user")
 			role := ctx.Value("role")
 			results = append(results, "context-"+user.(string)+"-"+role.(string))
 			if next != nil {
-				return next.Next(ctx)
+				return next.Run(ctx)
 			}
 			return nil
 		})
@@ -227,28 +227,28 @@ func TestDoAsStageComposition(t *testing.T) {
 
 func TestDoWithBeforeAfter(t *testing.T) {
 	// Do wraps a stage with before and after behavior
-	Do := func(before func(context.Context) context.Context, stage NewStage, after func(context.Context) context.Context) NewStage {
-		return func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+	Do := func(before func(context.Context) context.Context, stage NewStep, after func(context.Context) context.Context) NewStep {
+		return func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				// Before
 				beforeCtx := before(ctx)
 
 				// Execute wrapped stage with a continuation that applies "after"
-				continuation := StageFunc(func(ctx context.Context) Stage {
+				continuation := StepFunc(func(ctx context.Context) Step {
 					// After (before continuing to next)
 					afterCtx := after(ctx)
 					if next != nil {
-						return next.Next(afterCtx)
+						return next.Run(afterCtx)
 					}
 					return nil
 				})
 				wrappedStage := stage(continuation)
 
 				if wrappedStage != nil {
-					return wrappedStage.Next(beforeCtx)
+					return wrappedStage.Run(beforeCtx)
 				}
 				if next != nil {
-					return next.Next(beforeCtx)
+					return next.Run(beforeCtx)
 				}
 				return nil
 			})
@@ -258,12 +258,12 @@ func TestDoWithBeforeAfter(t *testing.T) {
 	ctx := context.Background()
 	var results []string
 
-	coreLogic := func(next Stage) Stage {
-		return StageFunc(func(ctx context.Context) Stage {
+	coreLogic := func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
 			user := ctx.Value("user").(string)
 			results = append(results, "processing-"+user)
 			if next != nil {
-				return next.Next(ctx)
+				return next.Run(ctx)
 			}
 			return nil
 		})
@@ -281,13 +281,13 @@ func TestDoWithBeforeAfter(t *testing.T) {
 				return context.WithValue(ctx, "completed", true)
 			},
 		),
-		func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+		func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				if completed := ctx.Value("completed"); completed != nil {
 					results = append(results, "cleanup-completed")
 				}
 				if next != nil {
-					return next.Next(ctx)
+					return next.Run(ctx)
 				}
 				return nil
 			})
@@ -318,11 +318,11 @@ func TestDoReadabilityComparison(t *testing.T) {
 	_ = context.Background()
 
 	// Base stage for testing
-	baseStage := func(next Stage) Stage {
-		return StageFunc(func(ctx context.Context) Stage {
+	baseStage := func(next Step) Step {
+		return StepFunc(func(ctx context.Context) Step {
 			// does some work
 			if next != nil {
-				return next.Next(ctx)
+				return next.Run(ctx)
 			}
 			return nil
 		})
@@ -330,15 +330,15 @@ func TestDoReadabilityComparison(t *testing.T) {
 
 	// 1. Original inline approach
 	_ = Sequence(
-		func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+		func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				newCtx := context.WithValue(ctx, "user", "alice")
 				wrappedStage := baseStage(next)
 				if wrappedStage != nil {
-					return wrappedStage.Next(newCtx)
+					return wrappedStage.Run(newCtx)
 				}
 				if next != nil {
-					return next.Next(newCtx)
+					return next.Run(newCtx)
 				}
 				return nil
 			})
@@ -346,16 +346,16 @@ func TestDoReadabilityComparison(t *testing.T) {
 	)
 
 	// 2. Do as wrapper
-	DoWrapper := func(transform func(context.Context) context.Context, stage NewStage) NewStage {
-		return func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+	DoWrapper := func(transform func(context.Context) context.Context, stage NewStep) NewStep {
+		return func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				newCtx := transform(ctx)
 				wrappedStage := stage(next)
 				if wrappedStage != nil {
-					return wrappedStage.Next(newCtx)
+					return wrappedStage.Run(newCtx)
 				}
 				if next != nil {
-					return next.Next(newCtx)
+					return next.Run(newCtx)
 				}
 				return nil
 			})
@@ -369,17 +369,17 @@ func TestDoReadabilityComparison(t *testing.T) {
 	)
 
 	// 3. Do as transformer
-	DoTransformer := func(transform func(context.Context) context.Context) func(NewStage) NewStage {
-		return func(stage NewStage) NewStage {
-			return func(next Stage) Stage {
-				return StageFunc(func(ctx context.Context) Stage {
+	DoTransformer := func(transform func(context.Context) context.Context) func(NewStep) NewStep {
+		return func(stage NewStep) NewStep {
+			return func(next Step) Step {
+				return StepFunc(func(ctx context.Context) Step {
 					newCtx := transform(ctx)
 					wrappedStage := stage(next)
 					if wrappedStage != nil {
-						return wrappedStage.Next(newCtx)
+						return wrappedStage.Run(newCtx)
 					}
 					if next != nil {
-						return next.Next(newCtx)
+						return next.Run(newCtx)
 					}
 					return nil
 				})

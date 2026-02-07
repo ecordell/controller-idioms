@@ -43,15 +43,15 @@ type NewHandler func(next Handler) Handler
 
 ```go
 pipeline := state.Sequence(
-    state.Step(func(ctx context.Context) context.Context {
+    state.Do(func(ctx context.Context) context.Context {
         fmt.Println("first handler")
         return ctx
     }),
-    state.Step(func(ctx context.Context) context.Context {
+    state.Do(func(ctx context.Context) context.Context {
         fmt.Println("second handler")
         return ctx
     }),
-    state.Step(func(ctx context.Context) context.Context {
+    state.Do(func(ctx context.Context) context.Context {
         fmt.Println("third handler")
         return ctx
     }),
@@ -64,7 +64,7 @@ state.Run(ctx, pipeline)
 
 ```go
 pipeline := state.Sequence(
-    state.Step(func(ctx context.Context) context.Context {
+    state.Do(func(ctx context.Context) context.Context {
         fmt.Println("initialization")
         return ctx
     }),
@@ -73,12 +73,12 @@ pipeline := state.Sequence(
             return someCondition(ctx)
         },
         // True branch
-        state.Step(func(ctx context.Context) context.Context {
+        state.Do(func(ctx context.Context) context.Context {
             fmt.Println("condition was true")
             return ctx
         }),
         // False branch  
-        state.Step(func(ctx context.Context) context.Context {
+        state.Do(func(ctx context.Context) context.Context {
             fmt.Println("condition was false")
             return ctx
         }),
@@ -90,25 +90,25 @@ pipeline := state.Sequence(
 
 ```go
 pipeline := state.Sequence(
-    state.Step(func(ctx context.Context) context.Context {
+    state.Do(func(ctx context.Context) context.Context {
         fmt.Println("before parallel work")
         return ctx
     }),
     state.Parallel(
-        state.Step(func(ctx context.Context) context.Context {
+        state.Do(func(ctx context.Context) context.Context {
             fmt.Println("parallel task 1")
             return ctx
         }),
-        state.Step(func(ctx context.Context) context.Context {
+        state.Do(func(ctx context.Context) context.Context {
             fmt.Println("parallel task 2") 
             return ctx
         }),
-        state.Step(func(ctx context.Context) context.Context {
+        state.Do(func(ctx context.Context) context.Context {
             fmt.Println("parallel task 3")
             return ctx
         }),
     ),
-    state.Step(func(ctx context.Context) context.Context {
+    state.Do(func(ctx context.Context) context.Context {
         fmt.Println("after parallel work")
         return ctx
     }),
@@ -123,21 +123,21 @@ pipeline := state.Enum(
         return getResourceType(ctx)
     },
     map[string]state.NewHandler{
-        "deployment": state.Step(func(ctx context.Context) context.Context {
+        "deployment": state.Do(func(ctx context.Context) context.Context {
             fmt.Println("handling deployment")
             return ctx
         }),
-        "service": state.Step(func(ctx context.Context) context.Context {
+        "service": state.Do(func(ctx context.Context) context.Context {
             fmt.Println("handling service")
             return ctx
         }),
-        "configmap": state.Step(func(ctx context.Context) context.Context {
+        "configmap": state.Do(func(ctx context.Context) context.Context {
             fmt.Println("handling configmap")
             return ctx
         }),
     },
     // Default case
-    state.Step(func(ctx context.Context) context.Context {
+    state.Do(func(ctx context.Context) context.Context {
         fmt.Println("unknown resource type")
         return ctx
     }),
@@ -203,7 +203,7 @@ This replicates the old handler pattern:
 ```go
 // Old handler pattern
 if len(validations) == 0 {
-    h.Next.Handle(ctx)
+    h.Next.Run(ctx)
     return
 }
 h.ensureValidatingAdmissionPolicy(ctx)
@@ -240,7 +240,7 @@ pipeline := state.Map(
         // Transform the context
         return context.WithValue(ctx, "key", "transformed_value")
     },
-    state.Step(func(ctx context.Context) context.Context {
+    state.Do(func(ctx context.Context) context.Context {
         value := ctx.Value("key").(string)
         fmt.Printf("received: %s\n", value)
         return ctx
@@ -252,12 +252,12 @@ pipeline := state.Map(
 
 ```go
 pipeline := state.Bind(
-    state.Step(func(ctx context.Context) context.Context {
+    state.Do(func(ctx context.Context) context.Context {
         fmt.Println("first operation")
         return ctx
     }),
     func() state.NewHandler {
-        return state.Step(func(ctx context.Context) context.Context {
+        return state.Do(func(ctx context.Context) context.Context {
             fmt.Println("dependent operation")
             return ctx
         })
@@ -267,15 +267,15 @@ pipeline := state.Bind(
 
 // Main controller pipeline
 mainPipeline := state.Sequence(
-    state.Step(func(ctx context.Context) context.Context {
+    state.Do(func(ctx context.Context) context.Context {
         // Set finalizer
         return ctx
     }),
-    state.Step(func(ctx context.Context) context.Context {
+    state.Do(func(ctx context.Context) context.Context {
         // Check for safe deletion
         return ctx
     }),
-    state.Step(func(ctx context.Context) context.Context {
+    state.Do(func(ctx context.Context) context.Context {
         // Check pause condition
         return ctx
     }),

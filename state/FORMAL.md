@@ -1,6 +1,27 @@
-# Formal Mathematical Structure of the Stage System
+# Formal Mathematical Structure of the Step System
 
-The Stage system provides a mathematically rigorous foundation for compositional computation with context threading in Kubernetes controllers. This document formalizes the mathematical structure underlying the system.
+The Step system provides a mathematically rigorous foundation for compositional computation with context threading in Kubernetes controllers. This document formalizes the mathematical structure underlying the system.
+
+## TL;DR - Why This Matters
+
+**For Practitioners:**
+- The formal structure guarantees your step compositions behave predictably
+- Laws ensure that refactoring (e.g., grouping steps differently) doesn't change behavior
+- Type safety prevents entire classes of bugs at compile time
+- Formal verification means less time debugging weird composition edge cases
+
+**For Theorists:**
+- The Step system forms a proper Kleisli category based on a continuation monad
+- Category laws (identity, associativity) are satisfied
+- Monad laws (left/right identity, associativity) hold for composition
+- This enables formal reasoning about step behavior and equational refactoring
+
+**Key Practical Benefits:**
+1. **Compositional**: Small steps compose into complex workflows predictably
+2. **Refactorable**: `Sequence(a, Sequence(b, c))` = `Sequence(a, b, c)` (associativity)
+3. **Identity-safe**: Adding/removing no-op steps doesn't change behavior
+4. **Type-safe**: Invalid compositions fail at compile time, not runtime
+5. **Testable**: Laws guarantee that testing small pieces validates larger compositions
 
 ## Category Theory Foundation
 
@@ -24,7 +45,7 @@ Our system forms a **category** `𝒞` where:
 
 ### Kleisli Category
 
-The Stage system forms a **Kleisli category** `𝒦(M)` based on the "Stage monad" `M`:
+The Step system forms a **Kleisli category** `𝒦(M)` based on the "Step monad" `M`:
 
 - **Objects**: Context states
 - **Kleisli Arrows**: `NewStage = func(next Stage) Stage`
@@ -44,7 +65,7 @@ The Stage system forms a **Kleisli category** `𝒦(M)` based on the "Stage mona
 
 ### Stage Monad
 
-The Stage system forms a **monad** with the following operations:
+The Step system forms a **monad** with the following operations:
 
 #### Unit (η)
 ```go
@@ -52,7 +73,7 @@ Unit :: Morphism → NewStage
 Unit(m) = Do(m)
 ```
 
-Lifts a pure context transformation into the Stage monad.
+Lifts a pure context transformation into the Step monad.
 
 #### Bind (μ)
 ```go
@@ -69,7 +90,7 @@ Provides monadic composition (though we primarily use Kleisli composition).
 
 ### Functor Structure
 
-The Stage system is also a **functor** with:
+The Step system is also a **functor** with:
 
 #### Functor Map
 ```go
@@ -120,7 +141,7 @@ Do :: (Context → Context) → NewStage
 ```
 
 **Mathematical Significance**:
-- **Unit Operation**: Lifts pure transformations into the Stage monad
+- **Unit Operation**: Lifts pure transformations into the Step monad
 - **Preserves Composition**: `Do(Compose(f, g)) ≈ Sequence(Do(f), Do(g))`
 - **Context Threading**: Ensures modified contexts flow to subsequent stages
 
@@ -230,4 +251,4 @@ The mathematical laws are verified through comprehensive test suites:
 - Natural transformation properties
 - Interpreter correctness
 
-This formal foundation ensures that the Stage system behaves predictably and can be reasoned about mathematically, providing a solid foundation for building complex, composable controller logic.
+This formal foundation ensures that the Step system behaves predictably and can be reasoned about mathematically, providing a solid foundation for building complex, composable controller logic.

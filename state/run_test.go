@@ -37,10 +37,10 @@ func TestRunIsUnnecessary(t *testing.T) {
 		}
 	}
 
-	// Test 2: Directly calling Stage().Next() without Run loop
+	// Test 2: Directly calling Step().Run() without Run loop
 	executed = nil
-	stage := pipeline.Stage()
-	result := stage.Next(ctx)
+	stage := pipeline.Step()
+	result := stage.Run(ctx)
 
 	// In continuation-passing style, calling Next() once should execute the entire pipeline
 	if result != nil {
@@ -84,8 +84,8 @@ func TestRunWithComplexPipeline(t *testing.T) {
 	)
 
 	// Test direct execution without Run loop
-	stage := pipeline.Stage()
-	result := stage.Next(ctx)
+	stage := pipeline.Step()
+	result := stage.Run(ctx)
 
 	// Should complete entirely in one call
 	if result != nil {
@@ -108,29 +108,29 @@ func TestRunWithContextThreading(t *testing.T) {
 
 	var values []string
 
-	addValue := func(key, value string) NewStage {
-		return func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+	addValue := func(key, value string) NewStep {
+		return func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				newCtx := context.WithValue(ctx, key, value)
 				values = append(values, "added-"+value)
 				if next != nil {
-					return next.Next(newCtx)
+					return next.Run(newCtx)
 				}
 				return nil
 			})
 		}
 	}
 
-	readValue := func(key string) NewStage {
-		return func(next Stage) Stage {
-			return StageFunc(func(ctx context.Context) Stage {
+	readValue := func(key string) NewStep {
+		return func(next Step) Step {
+			return StepFunc(func(ctx context.Context) Step {
 				if val := ctx.Value(key); val != nil {
 					values = append(values, "read-"+val.(string))
 				} else {
 					values = append(values, "read-empty")
 				}
 				if next != nil {
-					return next.Next(ctx)
+					return next.Run(ctx)
 				}
 				return nil
 			})
@@ -146,8 +146,8 @@ func TestRunWithContextThreading(t *testing.T) {
 	)
 
 	// Execute directly without Run loop
-	stage := pipeline.Stage()
-	result := stage.Next(ctx)
+	stage := pipeline.Step()
+	result := stage.Run(ctx)
 
 	if result != nil {
 		t.Errorf("Expected pipeline to complete, but got continuation: %v", result)
@@ -178,10 +178,10 @@ func TestSingleStageExecution(t *testing.T) {
 
 	stage := Action(func(ctx context.Context) {
 		executed = true
-	}).Stage()
+	}).Step()
 
 	// Single stage should complete without Run loop
-	result := stage.Next(ctx)
+	result := stage.Run(ctx)
 
 	if result != nil {
 		t.Errorf("Expected single stage to complete, but got continuation: %v", result)
@@ -205,8 +205,8 @@ func BenchmarkDirectExecution(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		stage := pipeline.Stage()
-		stage.Next(ctx)
+		stage := pipeline.Step()
+		stage.Run(ctx)
 	}
 }
 

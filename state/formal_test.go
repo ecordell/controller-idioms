@@ -575,13 +575,13 @@ func TestCompleteCategory(t *testing.T) {
 
 	// Build a complex pipeline using all our combinators
 	pipeline := SequenceC(
-		// Stage 1: Initialize
+		// Step 1: Initialize
 		Do(func(ctx context.Context) context.Context {
 			trace = append(trace, "init")
 			return context.WithValue(ctx, "step", 1)
 		}),
 
-		// Stage 2: Conditional branching
+		// Step 2: Conditional branching
 		ChoiceC(
 			func(ctx context.Context) bool {
 				return ctx.Value("step").(int) == 1
@@ -611,7 +611,7 @@ func TestCompleteCategory(t *testing.T) {
 			}),
 		),
 
-		// Stage 3: Finalization
+		// Step 3: Finalization
 		Do(func(ctx context.Context) context.Context {
 			trace = append(trace, "finalize")
 			return ctx

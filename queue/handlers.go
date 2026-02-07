@@ -29,9 +29,9 @@ import (
 //     processResource,
 //     queue.Done(), // Stop here - processing complete
 //   )
-func Done() state.NewHandler {
-	return func(next state.Handler) state.Handler {
-		return state.HandlerFunc(func(ctx context.Context) state.Handler {
+func Done() state.NewStep {
+	return func(next state.Step) state.Step {
+		return state.StepFunc(func(ctx context.Context) state.Step {
 			NewQueueOperationsCtx().Done(ctx)
 			return nil // Terminate pipeline
 		})
@@ -47,9 +47,9 @@ func Done() state.NewHandler {
 //     continueProcessing,
 //     queue.Requeue(), // Not ready - try again immediately
 //   )
-func Requeue() state.NewHandler {
-	return func(next state.Handler) state.Handler {
-		return state.HandlerFunc(func(ctx context.Context) state.Handler {
+func Requeue() state.NewStep {
+	return func(next state.Step) state.Step {
+		return state.StepFunc(func(ctx context.Context) state.Step {
 			NewQueueOperationsCtx().Requeue(ctx)
 			return nil // Terminate pipeline
 		})
@@ -66,9 +66,9 @@ func Requeue() state.NewHandler {
 //     continueProcessing,
 //     queue.RequeueAfter(30 * time.Second), // Not ready - try again in 30s
 //   )
-func RequeueAfter(duration time.Duration) state.NewHandler {
-	return func(next state.Handler) state.Handler {
-		return state.HandlerFunc(func(ctx context.Context) state.Handler {
+func RequeueAfter(duration time.Duration) state.NewStep {
+	return func(next state.Step) state.Step {
+		return state.StepFunc(func(ctx context.Context) state.Step {
 			NewQueueOperationsCtx().RequeueAfter(ctx, duration)
 			return nil // Terminate pipeline
 		})
@@ -88,9 +88,9 @@ func RequeueAfter(duration time.Duration) state.NewHandler {
 //       queue.RequeueErr(fmt.Errorf("validation failed")), // Invalid - requeue with error
 //     ),
 //   )
-func RequeueErr(err error) state.NewHandler {
-	return func(next state.Handler) state.Handler {
-		return state.HandlerFunc(func(ctx context.Context) state.Handler {
+func RequeueErr(err error) state.NewStep {
+	return func(next state.Step) state.Step {
+		return state.StepFunc(func(ctx context.Context) state.Step {
 			NewQueueOperationsCtx().RequeueErr(ctx, err)
 			return nil // Terminate pipeline
 		})
@@ -111,9 +111,9 @@ func RequeueErr(err error) state.NewHandler {
 //       queue.RequeueAPIErr(apiError), // Handle API error with proper retry logic
 //     ),
 //   )
-func RequeueAPIErr(err error) state.NewHandler {
-	return func(next state.Handler) state.Handler {
-		return state.HandlerFunc(func(ctx context.Context) state.Handler {
+func RequeueAPIErr(err error) state.NewStep {
+	return func(next state.Step) state.Step {
+		return state.StepFunc(func(ctx context.Context) state.Step {
 			NewQueueOperationsCtx().RequeueAPIErr(ctx, err)
 			return nil // Terminate pipeline
 		})
@@ -131,16 +131,16 @@ func RequeueAPIErr(err error) state.NewHandler {
 //     }),
 //     continueProcessing, // Only reached if resource is ready
 //   )
-func ConditionalRequeue(condition func(context.Context) bool) state.NewHandler {
-	return func(next state.Handler) state.Handler {
-		return state.HandlerFunc(func(ctx context.Context) state.Handler {
+func ConditionalRequeue(condition func(context.Context) bool) state.NewStep {
+	return func(next state.Step) state.Step {
+		return state.StepFunc(func(ctx context.Context) state.Step {
 			if condition(ctx) {
 				NewQueueOperationsCtx().Requeue(ctx)
 				return nil // Terminate pipeline
 			}
 			// Continue to next handler
 			if next != nil {
-				return next.Handle(ctx)
+				return next.Run(ctx)
 			}
 			return nil
 		})
@@ -159,16 +159,16 @@ func ConditionalRequeue(condition func(context.Context) bool) state.NewHandler {
 //     ),
 //     continueProcessing, // Only reached if resource is ready
 //   )
-func ConditionalRequeueAfter(condition func(context.Context) bool, duration time.Duration) state.NewHandler {
-	return func(next state.Handler) state.Handler {
-		return state.HandlerFunc(func(ctx context.Context) state.Handler {
+func ConditionalRequeueAfter(condition func(context.Context) bool, duration time.Duration) state.NewStep {
+	return func(next state.Step) state.Step {
+		return state.StepFunc(func(ctx context.Context) state.Step {
 			if condition(ctx) {
 				NewQueueOperationsCtx().RequeueAfter(ctx, duration)
 				return nil // Terminate pipeline
 			}
 			// Continue to next handler
 			if next != nil {
-				return next.Handle(ctx)
+				return next.Run(ctx)
 			}
 			return nil
 		})
@@ -186,16 +186,16 @@ func ConditionalRequeueAfter(condition func(context.Context) bool, duration time
 //     }),
 //     handleIncompleteProcessing, // Only reached if processing not complete
 //   )
-func ConditionalDone(condition func(context.Context) bool) state.NewHandler {
-	return func(next state.Handler) state.Handler {
-		return state.HandlerFunc(func(ctx context.Context) state.Handler {
+func ConditionalDone(condition func(context.Context) bool) state.NewStep {
+	return func(next state.Step) state.Step {
+		return state.StepFunc(func(ctx context.Context) state.Step {
 			if condition(ctx) {
 				NewQueueOperationsCtx().Done(ctx)
 				return nil // Terminate pipeline
 			}
 			// Continue to next handler
 			if next != nil {
-				return next.Handle(ctx)
+				return next.Run(ctx)
 			}
 			return nil
 		})
@@ -213,13 +213,13 @@ func ConditionalDone(condition func(context.Context) bool) state.NewHandler {
 //       queue.Done(), // If success
 //     ),
 //   )
-func OnError(errorHandler, successHandler state.NewHandler) state.NewHandler {
-	return func(next state.Handler) state.Handler {
-		return state.HandlerFunc(func(ctx context.Context) state.Handler {
+func OnError(errorHandler, successHandler state.NewStep) state.NewStep {
+	return func(next state.Step) state.Step {
+		return state.StepFunc(func(ctx context.Context) state.Step {
 			if ctx.Err() != nil {
-				return errorHandler.Handler().Handle(ctx)
+				return errorHandler.Step().Run(ctx)
 			}
-			return successHandler.Handler().Handle(ctx)
+			return successHandler.Step().Run(ctx)
 		})
 	}
 }
