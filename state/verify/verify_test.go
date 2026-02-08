@@ -56,3 +56,29 @@ func TestVerifyTerminates_Timeout(t *testing.T) {
 		t.Error("expected timeout error, got nil")
 	}
 }
+
+func TestVerifyProgress_Success(t *testing.T) {
+	pipeline := state.Sequence(
+		state.Action(func(ctx context.Context) {}),
+		state.Action(func(ctx context.Context) {}),
+		state.Action(func(ctx context.Context) {}),
+	)
+
+	err := verify.VerifyProgress(pipeline, 10)
+	if err != nil {
+		t.Errorf("expected progress verification to pass, got error: %v", err)
+	}
+}
+
+func TestVerifyProgress_ExceedsMax(t *testing.T) {
+	pipeline := state.Sequence(
+		state.Action(func(ctx context.Context) {}),
+		state.Action(func(ctx context.Context) {}),
+		state.Action(func(ctx context.Context) {}),
+	)
+
+	err := verify.VerifyProgress(pipeline, 2)
+	if err == nil {
+		t.Error("expected progress verification to fail, got nil")
+	}
+}

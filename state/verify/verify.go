@@ -65,3 +65,21 @@ func VerifyTerminates(pipeline state.NewStep, timeout time.Duration) error {
 		return fmt.Errorf("pipeline did not terminate within %v", timeout)
 	}
 }
+
+// VerifyProgress verifies that the pipeline makes progress and doesn't
+// execute more than maxSteps steps (to detect infinite loops).
+func VerifyProgress(pipeline state.NewStep, maxSteps int) error {
+	tracer, trace := NewTracer()
+	wrapped := state.WithMiddleware(pipeline, tracer)
+	state.Run(context.Background(), wrapped)
+
+	trace.mu.Lock()
+	stepCount := len(trace.Steps)
+	trace.mu.Unlock()
+
+	if stepCount > maxSteps {
+		return fmt.Errorf("exceeded max steps: %d > %d (possible infinite loop)", stepCount, maxSteps)
+	}
+
+	return nil
+}
