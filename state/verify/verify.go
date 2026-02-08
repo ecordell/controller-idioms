@@ -3,6 +3,7 @@ package verify
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/authzed/controller-idioms/state"
 )
@@ -44,4 +45,23 @@ func VerifyNoPanic(pipeline state.NewStep) error {
 	}
 
 	return nil
+}
+
+// VerifyTerminates verifies that the pipeline completes within the given timeout.
+func VerifyTerminates(pipeline state.NewStep, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		state.Run(ctx, pipeline)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("pipeline did not terminate within %v", timeout)
+	}
 }
