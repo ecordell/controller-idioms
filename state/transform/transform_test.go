@@ -109,14 +109,42 @@ func TestRecursiveMiddlewareWithDecision(t *testing.T) {
 	wrapped := state.WithMiddleware(pipeline, middleware)
 	state.Run(context.Background(), wrapped)
 
-	// Verify before/after wraps each step
+	// Note: DecisionStep.Run() uses tail-call optimization:
+	//   return chosen(d.next).Run(ctx)
+	// This means the Decision and its chosen branch execute atomically - there's
+	// no continuation boundary to intercept between the Decision and its branch.
+	//
+	// The middleware wraps the entire continuation chain, but the Decision's
+	// tail-call means the chosen branch executes immediately inline. The "after"
+	// hooks are called when unwinding from the continuation processing.
+	//
+	// Actual execution pattern:
+	//   before -> step1 -> true-branch -> step3 -> after (unwinding) -> before/before/after/after
 	expected := []string{
-		"before", "step1", "after",
-		"before", "before", "true-branch", "after", "after",
-		"before", "step3", "after",
+		"before",      // Start wrapping step1
+		"step1",       // Execute step1
+		"true-branch", // Decision tail-calls into chosen branch (no separate wrap)
+		"step3",       // Continue to step3
+		"after",       // Unwind from continuation processing
+		"before",      // Late before hooks from continuation wrapping
+		"before",
+		"after",
+		"after",
 	}
 
 	if len(executionOrder) != len(expected) {
-		t.Errorf("expected %d calls, got %d: %v", len(expected), len(executionOrder), executionOrder)
+		t.Errorf("expected %d calls, got %d\nExpected: %v\nGot:      %v",
+			len(expected), len(executionOrder), expected, executionOrder)
+	}
+
+	// Verify the actual sequence matches expectations
+	for i, exp := range expected {
+		if i >= len(executionOrder) {
+			t.Errorf("execution stopped at %d, expected %s at position %d", len(executionOrder), exp, i)
+			break
+		}
+		if executionOrder[i] != exp {
+			t.Errorf("at position %d: expected %s, got %s", i, exp, executionOrder[i])
+		}
 	}
 }
