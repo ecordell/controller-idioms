@@ -49,7 +49,11 @@ func RecursiveMiddleware(
 
 					var result state.Step
 					if next != nil {
-						result = next.Run(ctx)
+						// Wrap next before running it, so it also returns a continuation
+						wrappedNext := WrapStep(next, wrap)
+						if wrappedNext != nil {
+							result = wrappedNext.Run(ctx)
+						}
 					}
 
 					if after != nil {
