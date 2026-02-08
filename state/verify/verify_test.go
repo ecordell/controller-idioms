@@ -82,3 +82,23 @@ func TestVerifyProgress_ExceedsMax(t *testing.T) {
 		t.Error("expected progress verification to fail, got nil")
 	}
 }
+
+func TestVerifyOrdering_Success(t *testing.T) {
+	var order []string
+
+	pipeline := state.Sequence(
+		state.Action(func(ctx context.Context) {
+			order = append(order, "auth")
+		}),
+		state.Action(func(ctx context.Context) {
+			order = append(order, "process")
+		}),
+	)
+
+	// For now, just verify execution happens
+	state.Run(context.Background(), pipeline)
+
+	if len(order) != 2 || order[0] != "auth" || order[1] != "process" {
+		t.Errorf("expected [auth, process], got %v", order)
+	}
+}
