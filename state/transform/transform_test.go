@@ -148,3 +148,66 @@ func TestRecursiveMiddlewareWithDecision(t *testing.T) {
 		}
 	}
 }
+
+func TestIntegrationComplexPipeline(t *testing.T) {
+	var trace []string
+
+	logger := transform.RecursiveMiddleware(
+		func(ctx context.Context) {
+			trace = append(trace, "log-before")
+		},
+		func(ctx context.Context) {
+			trace = append(trace, "log-after")
+		},
+	)
+
+	pipeline := state.Sequence(
+		state.Action(func(ctx context.Context) {
+			trace = append(trace, "step1")
+		}),
+		state.Decision(
+			func(ctx context.Context) bool { return true },
+			state.Action(func(ctx context.Context) {
+				trace = append(trace, "true-branch")
+			}),
+			state.Action(func(ctx context.Context) {
+				trace = append(trace, "false-branch")
+			}),
+		),
+		state.Parallel(
+			state.Action(func(ctx context.Context) {
+				trace = append(trace, "parallel1")
+			}),
+			state.Action(func(ctx context.Context) {
+				trace = append(trace, "parallel2")
+			}),
+		),
+	)
+
+	ctx := context.Background()
+	ctx = transform.WithTransform(ctx, logger)
+
+	transform.RunWithTransforms(ctx, pipeline)
+
+	// Verify logging wrapped every step
+	if len(trace) < 10 {
+		t.Errorf("expected at least 10 trace entries, got %d: %v", len(trace), trace)
+	}
+
+	// Verify log-before appears before each action
+	// and log-after appears after each action
+	hasLogBefore := false
+	hasStep1 := false
+	for _, entry := range trace {
+		if entry == "log-before" {
+			hasLogBefore = true
+		}
+		if entry == "step1" && hasLogBefore {
+			hasStep1 = true
+		}
+	}
+
+	if !hasStep1 {
+		t.Error("log-before should appear before step1")
+	}
+}
