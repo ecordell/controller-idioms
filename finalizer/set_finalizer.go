@@ -2,8 +2,8 @@ package finalizer
 
 import (
 	"context"
+	"slices"
 
-	"golang.org/x/exp/slices"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/authzed/controller-idioms/component"
