@@ -1,8 +1,6 @@
 module github.com/authzed/controller-idioms/magefiles
 
-go 1.23.0
-
-toolchain go1.24.4
+go 1.27.0
 
 require (
 	github.com/golangci/golangci-lint v1.64.8
